@@ -7,12 +7,17 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import time
 import csv
+import requests
+from datetime import datetime
 
 # 크롬 드라이버 설정
 service = Service("/opt/homebrew/bin/chromedriver")
 options = webdriver.ChromeOptions()
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
+
+# 카카오 주소 검색 API 키 (필수 입력)
+KAKAO_API_KEY = '6d9dc3df95f90cbe474e8b518e13f2f2'
 
 # 서울시 구 리스트
 seoul_gu_list = [
@@ -21,12 +26,27 @@ seoul_gu_list = [
     "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"
 ]
 
+# 좌표 변환 함수
+def get_lat_lon(address):
+    url = "https://dapi.kakao.com/v2/local/search/address.json"
+    headers = {"Authorization": f"KakaoAK {KAKAO_API_KEY}"}
+    params = {"query": address}
+    response = requests.get(url, headers=headers, params=params)
+
+    if response.status_code == 200:
+        result = response.json().get('documents', [])
+        if result:
+            return result[0]['y'], result[0]['x']
+    return None, None
+
+# 크롬 드라이버 초기화
 def init_driver():
     driver = webdriver.Chrome(service=service, options=options)
     driver.get('https://map.kakao.com/')
     time.sleep(2)
     return driver
 
+# 검색어 입력 및 검색 실행
 def search_keyword(driver, keyword):
     search_area = driver.find_element(By.ID, 'search.keyword.query')
     search_area.clear()
@@ -38,6 +58,7 @@ def search_keyword(driver, keyword):
     click_place_tab(driver)
     click_place_more(driver)
 
+# 팝업 제거
 def remove_dimmed_layer(driver):
     try:
         dimmed_layer = driver.find_element(By.ID, 'dimmedLayer')
@@ -45,10 +66,12 @@ def remove_dimmed_layer(driver):
     except:
         pass
 
+# 장소 탭 클릭
 def click_place_tab(driver):
     driver.find_element(By.XPATH, '//*[@id="info.main.options"]/li[2]/a').click()
     time.sleep(2)
 
+# 장소 더보기 클릭
 def click_place_more(driver):
     try:
         driver.find_element(By.ID, 'info.search.place.more').click()
@@ -56,6 +79,7 @@ def click_place_more(driver):
     except:
         pass
 
+# 메뉴 탭 펼치고 메뉴 수집
 def expand_menu_tab_and_collect(driver):
     menu_items = []
     try:
@@ -63,7 +87,6 @@ def expand_menu_tab_and_collect(driver):
         menu_tab.click()
         time.sleep(2)
 
-        # 메뉴 더보기 계속 클릭
         while True:
             try:
                 more_button = driver.find_element(By.CSS_SELECTOR, '.wrap_more a.link_more')
@@ -90,6 +113,7 @@ def expand_menu_tab_and_collect(driver):
 
     return menu_items if menu_items else ['메뉴 없음']
 
+# 매장 상세 정보 수집
 def get_store_details(driver, detail_url):
     original_window = driver.current_window_handle
 
@@ -107,6 +131,7 @@ def get_store_details(driver, detail_url):
 
     return menu_text
 
+# 모든 페이지 크롤링
 def crawl_all_pages(driver):
     all_data = []
 
@@ -148,14 +173,23 @@ def crawl_all_pages(driver):
 
     return all_data
 
+# CSV 저장 (날짜 포함 & 위도/경도 추가)
 def save_to_csv(gu_name, data):
-    filename = f'{gu_name}_맛집_크롤링.csv'
+    today = datetime.now().strftime("%Y%m%d")
+    filename = f'{today}_{gu_name}_맛집_크롤링.csv'
+
     with open(filename, 'w', encoding='utf-8-sig', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['이름', '평점', '리뷰수', '주소', '전화번호', '메뉴'])
-        writer.writerows(data)
+        writer.writerow(['이름', '평점', '리뷰수', '주소', '위도', '경도', '전화번호', '메뉴'])
+
+        for row in data:
+            name, degree, review_count, address, tel, menu_text = row
+            lat, lon = get_lat_lon(address)
+            writer.writerow([name, degree, review_count, address, lat, lon, tel, menu_text])
+
     print(f"✅ {gu_name} 저장 완료 ({filename})")
 
+# 서울시 구별 크롤링 실행
 def crawl_seoul_gu():
     for gu in seoul_gu_list:
         print(f"🔹 {gu} 크롤링 시작!")
@@ -168,5 +202,6 @@ def crawl_seoul_gu():
         driver.quit()
         print(f"✅ {gu} 크롤링 및 저장 완료\n")
 
+# 메인 실행
 if __name__ == '__main__':
     crawl_seoul_gu()
