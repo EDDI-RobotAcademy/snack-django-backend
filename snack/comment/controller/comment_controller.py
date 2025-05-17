@@ -32,8 +32,9 @@ class CommentController(viewsets.ViewSet):
             return JsonResponse({"error": "게시글 또는 작성자를 찾을 수 없습니다.", "success": False}, status=status.HTTP_404_NOT_FOUND)
 
         comment = self.__commentService.createComment(board, author, content)
-        if board.author.account.id != author.account.id:     # 게시물 생성자 != 댓글 생성자, 게시물 생성자만 알림 받으면 됌
-            self.__accountAlarmService.createBoardAlarm(board, comment)
+        if board.author.account.id != author.account.id:     # 게시물 생성자 != 댓글 생성자-> 자기 알람 불필요, 게시물 생성자만 알림 받으면 됌
+            print("DEBUG comment Alarm")  #     AAA
+            self.__accountAlarmService.createCommentAlarmToBoard(board, comment)
 
         return JsonResponse({
             "success": True,
@@ -61,13 +62,20 @@ class CommentController(viewsets.ViewSet):
             return JsonResponse({"error": "게시글, 작성자 또는 부모 댓글을 찾을 수 없습니다.", "success": False}, status=status.HTTP_404_NOT_FOUND)
 
         reply = self.__commentService.createComment(board, author, content, parent)
-        if board.author.account.id != author.account.id:     # 게시물 생성자 = 댓글 생성자, 게시물 생성자만 알림 받으면 됌
-            self.__accountAlarmService.createBoardAlarm(board, comment)
+        # 게시물 생성자에게 알림 (자기 댓글 제외)
+        if board.author.account.id != author.account.id:   # 게시물 생성자 != 댓글 생성자, 게시물 생성자만 알림 받으면 됌
+            print("[DEBUG] createBoardReplyAlarm called")  # AAA
+            self.__accountAlarmService.createReplyCommentAlarmToBoard(board, reply)
 
-            # 게시글 생성자가 아닌 대댓글 알림
-        #     self.__accountAlarmService.createCommentAlarm(board, reply, author, parent)
-        # else:
-        #     self.__accountAlarmService.createCommentAlarm(board, reply, author, parent)
+        # 부모 댓글 작성자에게 알림 (자기 댓글 제외)
+        if parent.author.account.id != author.account.id:
+            self.__accountAlarmService.createReplyCommentAlarmToParent(board, reply, parent)
+
+        # 부모 댓글이 같은 자식 댓글 작성자에게 알림 (자기 댓글 제외)
+        child_replies = self.__commentService.findChildRepliesByParent(parent)
+        for reply in child_replies:
+            if reply.author.account.id != author.account.id:  # 자기 자신 제외
+                self.__accountAlarmService.createReplyCommentAlarmToChild(board, reply, reply.author.account)
 
         return JsonResponse({
             "success": True,
@@ -177,15 +185,29 @@ class CommentController(viewsets.ViewSet):
         user_token = request.headers.get("Authorization", "").replace("Bearer ", "")
         user_id = RedisCacheServiceImpl.getInstance().getValueByKey(user_token)
 
+        if not user_token:
+            return JsonResponse({"error": "Authorization 헤더가 필요합니다.", "success": False},
+                                status=status.HTTP_400_BAD_REQUEST)
         if not user_id:
             return JsonResponse({"error": "user_id가 필요합니다.", "success": False}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            user = AccountProfile.objects.get(account__id=user_id)
-        except ObjectDoesNotExist:
-            return JsonResponse({"error": "사용자를 찾을 수 없습니다.", "success": False}, status=status.HTTP_404_NOT_FOUND)
+        # try:
+        #     user = AccountProfile.objects.get(account__id=user_id)
+        # except ObjectDoesNotExist:
+        #     return JsonResponse({"error": "사용자를 찾을 수 없습니다.", "success": False}, status=status.HTTP_404_NOT_FOUND)
 
         deleted, status_code, message = self.__commentService.deleteComment(comment_id, user_token)
+
+        if deleted:
+            try:
+                self.__accountAlarmService.deleteCommentAlarm(comment_id)
+            except Exception as e:
+                print(f"[ERROR] 알림 삭제 중 오류 발생: {str(e)}")
+                return JsonResponse({
+                    "success": deleted,
+                    "message": message,
+                    "warning": "댓글 삭제는 완료되었으나 알림 삭제 중 오류가 발생했습니다."
+                }, status=status_code)
+
         return JsonResponse({"success": deleted, "message": message}, status=status_code)
 
     def updateComment(self, request, comment_id):

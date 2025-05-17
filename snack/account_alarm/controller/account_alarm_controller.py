@@ -15,7 +15,6 @@ class AccountAlarmController(viewsets.ViewSet):
     redisCacheService = RedisCacheServiceImpl.getInstance()
 
 
-
     def __checkAlarmsStatus(self, account_id):
         account_profile = self.__accountProfileService.getProfileObjectByAccountId(account_id)
         if not account_profile:
@@ -60,6 +59,7 @@ class AccountAlarmController(viewsets.ViewSet):
                 "unread_count": alarm_response.get("unread_count")
             }
         }, status=200)
+
 
     def readUserAlarm(self, request):
         user_token = request.headers.get("userToken")

@@ -1,11 +1,12 @@
 from account_alarm.repository.account_alarm_repository_impl import AccountAlarmRepositoryImpl
 from account_profile.entity.account_profile import AccountProfile
+from account_alarm.service.account_alarm_service import AccountAlarmService
 from board.entity.board import Board
 from comment.entity.comment import Comment
 from account.entity.account import Account
 
 
-class AccountAlarmServiceImpl:
+class AccountAlarmServiceImpl(AccountAlarmService):
     __instance = None
 
     def __new__(cls):
@@ -20,7 +21,6 @@ class AccountAlarmServiceImpl:
             cls.__instance = cls()
         return cls.__instance
 
-
     def getUserAllAlarmList(self, account_id):
         return self.__accountAlarmRepository.findUnreadAllAlarmsById(account_id)
 
@@ -28,14 +28,26 @@ class AccountAlarmServiceImpl:
         return self.__accountAlarmRepository.findUnreadBoardAlarmsById(account_id)
 
     def getUserCommentAlarList(self, account_id):
-        return self.__accountAlarmRepository.findUnreadCommentAlarmById(account_id)
+        return self.__accountAlarmRepository.findUnreadCommentAlarmsById(account_id)
+
+
+
+    def createCommentAlarmToBoard(self, board: Board, comment: Comment):
+        return self.__accountAlarmRepository.saveCommentAlarmToBoard(board, comment)
+
+    def createReplyCommentAlarmToBoard(self, board: Board, comment: Comment):
+        return self.__accountAlarmRepository.saveReplyAlarmToBoard(board, comment)
+
+    def createReplyCommentAlarmToParent(self, board: Board, comment: Comment, parent: Comment):
+        self.__accountAlarmRepository.saveReplyAlarmToParent(board, comment, parent)
+
+    def createReplyCommentAlarmToChild(self, board: Board, comment: Comment, recipient: Account):
+        self.__accountAlarmRepository.saveReplyAlarmToChild(board, comment, recipient)
+
+
 
     def readAlarm(self, alarm_id):
         return self.__accountAlarmRepository.saveReadAlarmById(alarm_id)
-
-    def createBoardAlarm(self, board: Board, comment: Comment):
-        return self.__accountAlarmRepository.saveBoardAlarm(board, comment)
-
 
     def countUnreadAllAlarms(self, account_id):
         return self.__accountAlarmRepository.countUnreadAllAlarmsById(account_id)
@@ -46,45 +58,20 @@ class AccountAlarmServiceImpl:
     def countUnreadCommentAlarms(self, account_id):
         return self.__accountAlarmRepository.countUnreadCommentAlarmsById(account_id)
 
-    def createCommentAlarm(self, alarm_id):
-        pass
-
-    def checkAlarmForBoard(self, account_id):
-        pass
 
 
-    #
-    # def createCommentAlarm(self, board: Board, comment: Comment, parent: Comment = None):
-    #
-    #     # 게시물 작성자 알림 (BOARD 타입)
-    #     if board.author.account.id != comment.author.account.id:
-    #         self.__createAlarm(
-    #             recipient=board.author.account,
-    #             board=board,
-    #             comment=comment,
-    #             alarm_type="BOARD"
-    #         )
-    #
-    #     # 대댓글 알림 (COMMENT 타입)
-    #     if parent:
-    #         # 부모 댓글 작성자가 대댓글 작성자가 아닐 경우 (자기 대댓글 제외)
-    #         if parent.author.account.id != comment.author.account.id:
-    #             self.__createAlarm(
-    #                 recipient=parent.author.account,
-    #                 board=board,
-    #                 comment=comment,
-    #                 alarm_type="COMMENT"
-    #             )
-    #
-    #
-    # def __createAlarm(self, recipient: Account, board: Board, comment: Commnt, alarm_type: str):
-    #     """
-    #     일반적인 알림 생성 (다양한 상황에 사용 가능)
-    #     """
-    #     AccountAlarm.objects.create(
-    #         recipient=recipient,
-    #         board=board,
-    #         comment=comment,
-    #         alarm_type=alarm_type,
-    #         is_unread=True
-    #     )
+    def deleteCommentAlarm(self, comment_id):
+        try:
+            self.__accountAlarmRepository.deleteAlarmByCommentId(comment_id)
+            print(f"[DEBUG] 알림이 삭제되었습니다.")            # AAA
+        except Exception as e:
+            print(f"[ERROR] 댓글 알림 삭제 실패: {str(e)}")                       # AAA
+            raise e
+
+    def deleteBoardRelatedAlams(self, board_id):
+        try:
+            delete_count = self.__accountAlarmRepository.deleteAlarmsByBoardId(board_id)
+            print(f"[DEBUG] {delete_count}개의 게시글 관련 알림이 삭제되었습니다.") # AAA
+        except Exception as e:
+            print(f"[ERROR] 게시글 알림 삭제 중 오류 발생: {str(e)}")  # AAA
+            raise e

@@ -52,3 +52,7 @@ class CommentServiceImpl(CommentService):
 
         deleted = self.__commentRepository.delete(comment_id)
         return deleted, 200, "댓글이 삭제되었습니다." if deleted else (False, 500, "삭제 실패")
+
+
+    def findChildRepliesByParent(self, parent):
+        return self.__commentRepository.findRepliesByParent(parent)

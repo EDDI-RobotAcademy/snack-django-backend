@@ -1,5 +1,7 @@
 from django.http import JsonResponse
 from rest_framework import status, viewsets
+
+from account_alarm.service.account_alarm_service_impl import AccountAlarmServiceImpl
 from board.service.board_service_impl import BoardServiceImpl
 from account_profile.entity.account_profile import AccountProfile
 from django.core.paginator import Paginator
@@ -15,6 +17,7 @@ class BoardController(viewsets.ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     __boardService = BoardServiceImpl.getInstance()
     __accountService = AccountServiceImpl.getInstance()
+    __accountAlarmService = AccountAlarmServiceImpl.getInstance()
     __redisService = RedisCacheServiceImpl.getInstance()
 
     def createBoard(self, request):
@@ -197,6 +200,17 @@ class BoardController(viewsets.ViewSet):
     def deleteBoard(self, request, board_id):
         userToken = request.headers.get("Authorization", "").replace("Bearer ", "")
         deleted, status_code, message = self.__boardService.deleteBoardWithToken(board_id, userToken)
+
+        if deleted:
+            try:
+                self.__accountAlarmService.deleteBoardRelatedAlams(board_id)
+            except Exception as e:
+                print(f"[ERROR] 알림 삭제 중 오류 발생: {str(e)}")
+                return JsonResponse({
+                    "success": deleted,
+                    "message": message,
+                    "warning": "게시글 관련 알림 삭제 중 오류가 발생했습니다."
+                }, status=status_code)
 
         return JsonResponse({"success": deleted, "message": message}, status=status_code)
 

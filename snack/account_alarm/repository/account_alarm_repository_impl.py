@@ -2,10 +2,11 @@ from board.entity.board import Board
 from comment.entity.comment import Comment
 from account_alarm.entity.account_alarm import AccountAlarm
 from account_profile.entity.account_profile import AccountProfile
+from account_alarm.repository.account_alarm_repository import AccountAlarmRepository
 # from django.utils import timezone
 # from datetime import timedelta
 
-class AccountAlarmRepositoryImpl:
+class AccountAlarmRepositoryImpl(AccountAlarmRepository):
     __instance = None
 
     def __new__(cls):
@@ -114,7 +115,7 @@ class AccountAlarmRepositoryImpl:
             raise ObjectDoesNotExist("알림을 찾을 수 없습니다.")
 
 
-    def saveBoardAlarm(self, board: Board, comment: Comment):
+    def saveCommentAlarmToBoard(self, board: Board, comment: Comment):
         AccountAlarm.objects.create(
             alarm_type="BOARD",
             is_unread=True,
@@ -122,3 +123,21 @@ class AccountAlarmRepositoryImpl:
             recipient=board.author.account,
             comment=comment
         )
+
+    def saveReplyAlarmToBoard(self, board: Board, comment: Comment):
+        print(f"[DEBUG] Save Board Alarm: {board.id}, {comment.id}")  # AAA
+        AccountAlarm.objects.create(
+            alarm_type="COMMENT",
+            is_unread=True,
+            board=board,
+            recipient=board.author.account,
+            comment=comment,
+        )
+
+    def deleteAlarmByCommentId(self, comment_id):
+        return AccountAlarm.objects.filter(comment_id=comment_id).delete()
+
+
+    def deleteAlarmsByBoardId(self, board_id):
+        delete_count, _ = AccountAlarm.objects.filter(board_id=board_id).delete()
+        return delete_count
